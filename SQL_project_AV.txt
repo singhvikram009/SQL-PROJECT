@@ -1,0 +1,251 @@
+mysql> CREATE DATABASE AV_PROJECT;
+Query OK, 1 row affected (0.13 sec)
+
+mysql> USE AV_PROJECT
+Database changed
+mysql> SHOW tables;
+Empty set (0.06 sec)
+
+create table visitor_log_data (
+    webClientID varchar(15),
+    visitDateTime datetime,
+    productID char(8),
+    userID char(7),
+    activity varchar(8),
+    browser varchar(26),
+    os varchar(13),
+    city varchar(63),
+    country varchar(70)
+    );
+
+CREATE TABLE user_data(
+    userID       CHAR(7),
+    signUpDate  DATETIME,
+    userSegment CHAR(1)
+    );
+
+load data local infile "C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Uploads\\DE1_SQL\\VisitorLogsData.csv"
+     into table visitor_log_data columns
+     terminated by ","
+     ignore 1 lines;
+
+load data local infile "C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Uploads\\DE1_SQL\\UsersRegistrationData.csv"
+     into table user_data columns
+     terminated by ","
+     ignore 1 lines;
+
+
+CREATE VIEW total_data AS
+SELECT
+	u.userid,
+	u.signupdate,
+	u.usersegment,
+	v.webclientid
+	v.visitdatetime
+	v.productid;
+	v.activity,
+	v.browser
+	v.os,
+	v.city,
+	v.country
+FROM user_data  u
+JOIN visitor_log_data  v
+GROUP BY userid
+ORDER BY userid;
+
+
+
+1. NO_of_days_Visited_7_Days:
+
+
+CREATE OR REPLACE VIEW NO_of_Days_Visited_7_Days AS
+SELECT 
+	userid,
+	count(DISTINCT DATE(visitdatetime)) as NO_of_days_Visited_7_Days
+FROM total_data
+WHERE DATE(visitdatetime) BETWEEN '2018-05-21' AND '2018-05-27'
+GROUP BY userid
+ORDER BY userid;
+
+2. NUMBER OF PRODUCT VIEWED IN LAST 15 DAYS:
+
+CREATE OR REPLACE VIEW no_of_product_viewed_15_days AS
+
+SELECT
+	userid,
+	CASE
+	WHEN visitdatetime BETWEEN '2018-05-13' AND '2018-05-27' THEN
+	count(DISTINCT productid)
+	ELSE 0
+	END AS No_Of_Product_Viewed_15_Days
+FROM total_data
+WHERE productid !=''
+GROUP BY userid
+ORDER BY userid;
+
+
+
+3. VINTAGE (in DAYS) OF THE USER AS OF TODAY:
+
+CREATE VIEW User_Vintage AS
+
+SELECT 
+	userid,
+	DATEDIFF('2018-05-28',(signupdate)) AS User_Vintage
+FROM total_data
+GROUP BY userid
+ORDER BY userid;
+
+
+
+4. Most_Viewed_product_15_Days
+
+CREATE VIEW Most_Viewed_product_15_Days AS
+SELECT
+	userid,
+	CASE
+	WHEN visitdatetime BETWEEN '2018-05-13' AND '2018-05-27' THEN
+	max(productid)
+	ELSE 'PRODUCT101'
+	END AS Most_Viewed_product_15_Days
+FROM total_data
+WHERE activity = 'pageload' OR 'PAGELOAD'
+GROUP BY userid
+ORDER BY userid;
+
+
+5. MOST_Active_OS:
+
+CREATE VIEW Most_Active_OS AS
+SELECT
+	userid,
+	max(os) AS Most_Active_OS
+FROM total_data
+GROUP BY userid
+ORDER BY userid;
+
+
+6. Recently_Viewed_Product:
+
+CREATE VIEW Recently_Viewed_Product AS
+SELECT
+	userid,
+	CASE
+	WHEN max(visitdatetime) BETWEEN '2018-05-07' AND '2018-05-27' THEN
+	productid
+	ELSE 'PRODUCT101'
+	END AS Recently_Viewed_Product
+FROM total_data
+WHERE (activity = 'pageload' OR 'PAGELOAD') AND (productid !='')
+GROUP BY userid
+ORDER BY userid;
+
+
+
+7. Pageloads_last_7_days:
+
+CREATE VIEW Pageloads_last_7_days AS
+SELECT
+	userid,
+	CASE
+	WHEN visitdatetime BETWEEN '2018-05-21' AND '2018-05-27' THEN
+	count(activity)
+	ELSE 0
+	END AS Pageloads_last_7_days
+FROM total_data
+WHERE activity = 'pageload' OR 'PAGELOAD'
+GROUP BY userid
+ORDER BY userid;
+
+8. click_last_7_days:
+
+CREATE VIEW Clicks_last_7_days AS
+SELECT
+	userid,
+	CASE
+	WHEN visitdatetime BETWEEN '2018-05-21' AND '2018-05-27' THEN
+	count(activity)
+	ELSE 0
+	END AS Clicks_last_7_days
+FROM total_data
+WHERE activity = 'click' OR 'CLICK'
+GROUP BY userid
+ORDER BY userid;
+
+
+CREATE VIEW A AS
+SELECT 
+	t.userid,
+	d.NO_of_Days_Visited_7_Days,
+	p.No_Of_Product_Viewed_15_Days
+
+FROM total_data  t
+
+LEFT JOIN NO_of_Days_Visited_7_Days  d
+	ON t.userid = d.userid
+
+LEFT JOIN no_of_product_viewed_15_days  p
+	ON t.userid = p.userid
+GROUP BY t.userid
+ORDER BY t.userid;
+
+
+
+CREATE VIEW B AS
+SELECT 
+	t.userid,
+	v.User_Vintage,
+	m.Most_Viewed_product_15_Days,
+	r.Recently_Viewed_Product
+
+FROM total_data  t
+
+LEFT JOIN User_Vintage  v
+	ON t.userid = v.userid
+
+LEFT JOIN Most_Viewed_product_15_Days m
+	ON t.userid = m.userid
+
+LEFT JOIN Recently_Viewed_Product  r
+	ON t.userid = r.userid
+GROUP BY t.userid
+ORDER BY t.userid;
+                       
+
+CREATE VIEW C AS
+SELECT 
+	t.userid,
+	pl.Pageloads_last_7_days,
+	c.Clicks_last_7_days
+
+FROM total_data  t
+
+LEFT JOIN Pageloads_last_7_days pl
+	ON t.userid = pl.userid
+
+LEFT JOIN clicks_last_7_days ca
+	ON t.userid = c.userid
+GROUP BY t.userid
+ORDER BY t.userid;
+
+
+CREATE OR REPLACE VIEW input_feature_table AS
+SELECT 
+	A.userid,
+	A.NO_of_Days_Visited_7_Days,
+	A.No_Of_Product_Viewed_15_Days,
+	B.User_Vintage,
+	B.Most_Viewed_product_15_Days,
+	O.Most_Active_OS,
+	B.Recently_Viewed_Product,
+	C.Pageloads_last_7_days,
+	C.Clicks_last_7_days
+FROM A
+LEFT JOIN B
+	ON A.userid = B.userid
+LEFT JOIN C
+	ON A.userid= C.userid
+LEFT JOIN Most_Active_OS  O
+	ON A.userid = O.userid
+GROUP BY A.userid
+ORDER BY A.userid;
